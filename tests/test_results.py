@@ -1,3 +1,6 @@
+import csv
+import io
+
 import pytest
 
 
@@ -5,11 +8,11 @@ import pytest
 def ranked_event(client, make_competition, make_event, make_athlete, make_registration):
     """Fabrique : une épreuve close, un athlète confirmé et un résultat par performance."""
 
-    def _make(unit: str, performances: list[float]) -> dict:
+    def _make(unit: str, performances: list[float], club: str | None = None) -> dict:
         competition = make_competition(status="open")
         event = make_event(competition["id"], unit=unit)
         registrations = [
-            make_registration(event["id"], make_athlete(f"Athlete{i}")["id"])
+            make_registration(event["id"], make_athlete(f"Athlete{i}", club=club)["id"])
             for i in range(len(performances))
         ]
         client.patch(f"/competitions/{competition['id']}", json={"status": "closed"})
@@ -63,6 +66,21 @@ def test_ranking_invalid_event_id_returns_422(client):
     response = client.get("/events/abc/ranking")
 
     assert response.status_code == 422
+
+
+def test_export_csv_club_with_comma_keeps_columns_aligned(client, ranked_event):
+    event = ranked_event("time_s", [11.9], club="Stade Lyonnais, section athlé")
+
+    response = client.get(f"/competitions/{event['competition_id']}/results.csv")
+
+    assert response.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(response.text)))
+    assert len(rows) == 1
+    row = rows[0]
+    assert None not in row  # pas de colonne excédentaire
+    assert row["club"] == "Stade Lyonnais, section athlé"
+    assert row["license_number"] == "DOS-000001"
+    assert row["performance"] == "11.9"
 
 
 def test_export_csv_unknown_competition_returns_404(client):

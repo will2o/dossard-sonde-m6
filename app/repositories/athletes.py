@@ -1,12 +1,29 @@
 from __future__ import annotations
 
+import csv
+import io
 import sqlite3
-from datetime import date
+from datetime import date, datetime
+
+from pydantic import ValidationError
 
 from app.categories import age_category
-from app.errors import ConflictError
+from app.errors import ApiError, ConflictError
 from app.repositories.common import fetch_or_404
-from app.schemas import AthleteCreate, AthleteOut
+from app.schemas import AthleteCreate, AthleteImportResult, AthleteOut, ImportLineError
+
+# Colonne de l'export CSV de la fédération -> champ de AthleteCreate.
+CSV_COLUMNS = {
+    "nom": "last_name",
+    "prenom": "first_name",
+    "date_naissance": "birth_date",
+    "sexe": "sex",
+    "club": "club",
+    "licence": "license_number",
+    "certificat_valide_jusqu": "medical_certificate_valid_until",
+}
+FIELD_TO_COLUMN = {field: column for column, field in CSV_COLUMNS.items()}
+DATE_COLUMNS = ("date_naissance", "certificat_valide_jusqu")
 
 
 def _to_athlete(row: sqlite3.Row) -> AthleteOut:
@@ -68,3 +85,62 @@ def create_athlete(conn: sqlite3.Connection, data: AthleteCreate) -> AthleteOut:
     )
     row = conn.execute("SELECT * FROM athletes WHERE id = ?", (cursor.lastrowid,)).fetchone()
     return _to_athlete(row)
+
+
+def import_athletes(conn: sqlite3.Connection, content: str) -> AthleteImportResult:
+    """Importe l'export CSV de la fédération (séparateur « ; », dates jj/mm/aaaa).
+
+    Une licence déjà enregistrée compte dans `skipped` ; une ligne invalide est reportée dans
+    `errors` avec son numéro (en-tête = ligne 1) sans interrompre l'import.
+    """
+    reader = csv.DictReader(io.StringIO(content), delimiter=";")
+    missing = [column for column in CSV_COLUMNS if column not in (reader.fieldnames or [])]
+    if missing:
+        raise ApiError(
+            f"Colonnes manquantes dans l'en-tête CSV : {', '.join(missing)}", "invalid_csv"
+        )
+
+    created = skipped = 0
+    errors: list[ImportLineError] = []
+    for row in reader:
+        try:
+            data = _parse_csv_row(row)
+        except ValueError as exc:
+            errors.append(ImportLineError(line=reader.line_num, message=str(exc)))
+            continue
+        try:
+            create_athlete(conn, data)
+        except ConflictError:
+            skipped += 1
+        else:
+            created += 1
+    return AthleteImportResult(created=created, skipped=skipped, errors=errors)
+
+
+def _parse_csv_row(row: dict[str | None, str | None]) -> AthleteCreate:
+    if None in row or any(row[column] is None for column in CSV_COLUMNS):
+        raise ValueError(f"nombre de colonnes incorrect (attendu {len(CSV_COLUMNS)})")
+    values = {column: (row[column] or "").strip() for column in CSV_COLUMNS}
+
+    fields: dict[str, str | date | None] = {}
+    for column, field in CSV_COLUMNS.items():
+        value = values[column]
+        fields[field] = _parse_fr_date(column, value) if column in DATE_COLUMNS else value or None
+    try:
+        return AthleteCreate.model_validate(fields)
+    except ValidationError as exc:
+        columns = dict.fromkeys(FIELD_TO_COLUMN[str(error["loc"][0])] for error in exc.errors())
+        messages = [
+            f"{column} invalide : {values[column]!r}" if values[column] else f"{column} manquant"
+            for column in columns
+        ]
+        raise ValueError(" ; ".join(messages)) from exc
+
+
+def _parse_fr_date(column: str, value: str) -> date | None:
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%d/%m/%Y").date()
+    except ValueError:
+        raise ValueError(f"{column} invalide : {value!r} (format attendu jj/mm/aaaa)") from None

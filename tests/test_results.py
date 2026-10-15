@@ -46,6 +46,21 @@ def test_ranking_orders_distances_descending(client, ranked_event):
     assert [(e["rank"], e["performance"]) for e in ranking] == [(1, 6.85), (2, 6.2), (3, 5.9)]
 
 
+def test_ranking_tied_times_share_rank_and_skip_next(client, ranked_event):
+    event = ranked_event("time_s", [12.4, 11.9, 12.1, 12.1])
+
+    response = client.get(f"/events/{event['id']}/ranking")
+
+    assert response.status_code == 200
+    ranking = response.json()
+    assert [(e["rank"], e["performance"]) for e in ranking] == [
+        (1, 11.9),
+        (2, 12.1),
+        (2, 12.1),
+        (4, 12.4),
+    ]
+
+
 def test_ranking_returns_empty_list_without_results(client, make_competition, make_event):
     event = make_event(make_competition()["id"])
 

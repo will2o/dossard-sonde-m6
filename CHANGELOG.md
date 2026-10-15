@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Correction de `GET /events/{event_id}/ranking` : les performances égales partagent désormais
+  le même rang et le rang suivant est sauté d'autant (1, 2, 2, 4).
 - Correction de `GET /competitions/{competition_id}/results.csv` : les champs contenant une virgule
   (nom de club, de compétition…) sont désormais entre guillemets et ne décalent plus les colonnes.
 - `GET /events/{event_id}/ranking` renvoie désormais la liste simple des entrées du classement

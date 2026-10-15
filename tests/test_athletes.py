@@ -121,3 +121,64 @@ def test_import_athletes_with_non_utf8_body_returns_400(client):
     assert response.json() == {
         "error": {"code": "invalid_csv", "message": "Le fichier CSV doit être encodé en UTF-8"},
     }
+
+
+def _names(response) -> list[str]:
+    return [a["last_name"] for a in response.json()]
+
+
+def test_list_athletes_defaults_to_limit_50(client, make_athlete):
+    for i in range(52):
+        make_athlete(f"Nom{i:02d}")
+
+    response = client.get("/athletes")
+
+    assert response.status_code == 200
+    assert len(response.json()) == 50
+    assert _names(response)[0] == "Nom00"
+
+
+def test_list_athletes_applies_limit_and_offset(client, make_athlete):
+    for name in ["Alpha", "Bravo", "Charlie", "Delta"]:
+        make_athlete(name)
+
+    response = client.get("/athletes", params={"limit": 2, "offset": 1})
+
+    assert response.status_code == 200
+    assert _names(response) == ["Bravo", "Charlie"]
+
+
+def test_list_athletes_offset_beyond_total_returns_empty_list(client, make_athlete):
+    make_athlete("Alpha")
+
+    response = client.get("/athletes", params={"offset": 5})
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_athletes_accepts_limit_bounds(client, make_athlete):
+    make_athlete("Alpha")
+    make_athlete("Bravo")
+
+    assert len(client.get("/athletes", params={"limit": 1}).json()) == 1
+    assert len(client.get("/athletes", params={"limit": 100}).json()) == 2
+
+
+def test_list_athletes_paginates_after_club_filter(client, make_athlete):
+    make_athlete("Alpha", club="AC Rivebelle")
+    make_athlete("Bravo", club="Stade Nordval")
+    make_athlete("Charlie", club="AC Rivebelle")
+    make_athlete("Delta", club="AC Rivebelle")
+
+    response = client.get("/athletes", params={"club": "AC Rivebelle", "limit": 2, "offset": 1})
+
+    assert response.status_code == 200
+    assert _names(response) == ["Charlie", "Delta"]
+
+
+def test_list_athletes_rejects_out_of_range_pagination(client):
+    for params in [{"limit": 0}, {"limit": 101}, {"offset": -1}, {"limit": "abc"}]:
+        response = client.get("/athletes", params=params)
+
+        assert response.status_code == 422, params

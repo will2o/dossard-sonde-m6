@@ -5,6 +5,7 @@ from datetime import date
 
 from app.categories import age_category
 from app.errors import ConflictError
+from app.repositories.common import fetch_or_404
 from app.schemas import AthleteCreate, AthleteOut
 
 
@@ -32,6 +33,16 @@ def list_athletes(conn: sqlite3.Connection, club: str | None = None) -> list[Ath
         params = (club,)
     sql += " ORDER BY last_name, first_name, id"
     return [_to_athlete(row) for row in conn.execute(sql, params)]
+
+
+def get_athlete(conn: sqlite3.Connection, athlete_id: int) -> AthleteOut:
+    row = fetch_or_404(
+        conn,
+        "SELECT * FROM athletes WHERE id = ?",
+        (athlete_id,),
+        f"Athlète {athlete_id} introuvable",
+    )
+    return _to_athlete(row)
 
 
 def create_athlete(conn: sqlite3.Connection, data: AthleteCreate) -> AthleteOut:

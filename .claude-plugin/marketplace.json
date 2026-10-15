@@ -1,0 +1,12 @@
+{
+  "name": "equipe-dossard",
+  "owner": { "name": "Équipe dossard" },
+  "description": "Plugins partagés de l'équipe dossard",
+  "plugins": [
+    {
+      "name": "dossard-equipe",
+      "source": "./plugins/dossard-equipe",
+      "description": "Conventions d'API, garde-fous et accès MCP en lecture seule"
+    }
+  ]
+}

@@ -14,3 +14,6 @@ data/*.db-journal
 CLAUDE.local.md
 .claude/settings.local.json
 .env
+
+# Journal local des appels MCP (hook journal_mcp.py)
+data/*.log

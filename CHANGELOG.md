@@ -2,6 +2,9 @@
 
 ## Non publié
 
+- `GET /events/{event_id}/ranking` renvoie désormais la liste simple des entrées du classement
+  (fin de l'enveloppe `{"data", "count"}`) ; épreuve inconnue : 404 au format d'erreur du projet
+  (`not_found`).
 - Ajout de la pagination `?limit=` (1-100, défaut 50) et `?offset=` (≥ 0, défaut 0) à `GET /athletes`,
   appliquée après le filtre `club` ; hors bornes : 422.
 - Ajout de `POST /athletes/import` : import de l'export CSV de la fédération (`created`, `skipped`,

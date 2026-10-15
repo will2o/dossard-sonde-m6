@@ -29,7 +29,7 @@ def test_ranking_orders_times_ascending(client, ranked_event):
     response = client.get(f"/events/{event['id']}/ranking")
 
     assert response.status_code == 200
-    ranking = response.json()["data"]
+    ranking = response.json()
     assert [(e["rank"], e["performance"]) for e in ranking] == [(1, 11.9), (2, 12.1), (3, 12.4)]
 
 
@@ -39,5 +39,36 @@ def test_ranking_orders_distances_descending(client, ranked_event):
     response = client.get(f"/events/{event['id']}/ranking")
 
     assert response.status_code == 200
-    ranking = response.json()["data"]
+    ranking = response.json()
     assert [(e["rank"], e["performance"]) for e in ranking] == [(1, 6.85), (2, 6.2), (3, 5.9)]
+
+
+def test_ranking_returns_empty_list_without_results(client, make_competition, make_event):
+    event = make_event(make_competition()["id"])
+
+    response = client.get(f"/events/{event['id']}/ranking")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_ranking_unknown_event_returns_404(client):
+    response = client.get("/events/999/ranking")
+
+    assert response.status_code == 404
+    assert response.json() == {"error": {"code": "not_found", "message": "Épreuve 999 introuvable"}}
+
+
+def test_ranking_invalid_event_id_returns_422(client):
+    response = client.get("/events/abc/ranking")
+
+    assert response.status_code == 422
+
+
+def test_export_csv_unknown_competition_returns_404(client):
+    response = client.get("/competitions/999/results.csv")
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": {"code": "not_found", "message": "Compétition 999 introuvable"}
+    }
